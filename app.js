@@ -825,6 +825,7 @@ function loadShareFromHash() {
       localStorage.setItem(dept.courseSelect.storageKey, data.c);
     }
     renderDetail(data.d, true);
+    history.replaceState(null, '', location.pathname);
     return true;
   } catch (e) {
     return false;
