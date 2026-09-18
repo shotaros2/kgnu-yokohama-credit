@@ -540,7 +540,9 @@ function renderSelect() {
   const faculties = {};
   DEPTS.forEach(d => { (faculties[d.faculty] = faculties[d.faculty] || []).push(d); });
 
-  let html = '<div class="select-view"><p class="select-intro">所属している学科を選んでください</p><div class="faculties">';
+  let html = '<div class="select-view">';
+  html += '<div class="select-ws-bar"><button class="ws-import-top-btn" onclick="showWsGuide()">📥 WebStation 自動取込</button></div>';
+  html += '<p class="select-intro">所属している学科を選んでください</p><div class="faculties">';
 
   for (const [fac, depts] of Object.entries(faculties)) {
     const fcolor = depts[0].fcolor;
@@ -987,13 +989,19 @@ function importFromPaste() {
     alert('WebStationの「単位修得状況照会」ページで、表の見出し行（「科目大区分」「合否」などの行）から最後の行末まで選択してコピーしてください。');
     return;
   }
-  const count = applyWebStationImport(currentDeptId, courses);
+  const deptSelect = document.getElementById('ws-dept-select');
+  const targetDeptId = deptSelect ? deptSelect.value : currentDeptId;
+  if (!targetDeptId) {
+    alert('学科を選択してください。');
+    return;
+  }
+  const count = applyWebStationImport(targetDeptId, courses);
   closeWsGuide();
   if (count === 0) {
     alert('共通教養科目の修得済み科目が見つかりませんでした。\n見出し行から最後の行末まで選択してコピーしてください。');
     return;
   }
-  renderDetail(currentDeptId, false);
+  renderDetail(targetDeptId, false);
   showToast(`共通教養${count}科目の単位を取り込みました`);
 }
 
@@ -1003,6 +1011,11 @@ function showWsGuide() {
   overlay.id = 'ws-guide-overlay';
   overlay.className = 'ws-guide-overlay';
   overlay.addEventListener('click', e => { if (e.target === overlay) closeWsGuide(); });
+  const deptPickerHtml = currentDeptId ? '' : `<select id="ws-dept-select" class="ws-dept-select">
+    <option value="">— 学科を選択してください —</option>
+    ${DEPTS.map(d => `<option value="${d.id}">${d.faculty}　${d.name}</option>`).join('')}
+  </select>`;
+
   overlay.innerHTML = `<div class="ws-guide-modal">
     <div class="ws-guide-header">
       <span class="ws-guide-title">WebStation から自動取込</span>
@@ -1047,6 +1060,7 @@ function showWsGuide() {
       </div>
     </div>
     <div class="ws-guide-footer">
+      ${deptPickerHtml}
       <button class="ws-import-btn" onclick="importFromPaste()">📥 取込</button>
     </div>
   </div>`;
