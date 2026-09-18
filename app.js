@@ -443,6 +443,7 @@ const DEPTS = [
 
 // ── State ──
 let currentDeptId = null;
+let wsReferenceRows = null;
 
 // ── Storage ──
 function storageKey(deptId, secId, itemId) {
@@ -535,6 +536,7 @@ function calcShinkyuList(dept, totalCredits) {
 // ── Rendering: Select View ──
 function renderSelect() {
   currentDeptId = null;
+  syncRefBtn();
   const faculties = {};
   DEPTS.forEach(d => { (faculties[d.faculty] = faculties[d.faculty] || []).push(d); });
 
@@ -619,6 +621,7 @@ function renderDetail(deptId, isShared) {
   html += '</div>';
 
   document.getElementById('app').innerHTML = html;
+  syncRefBtn();
 }
 
 function renderCourseSelectHTML(dept) {
@@ -956,6 +959,8 @@ function renderWsPreview(text) {
     return;
   }
 
+  wsReferenceRows = rows;
+  syncRefBtn();
   const passRows = rows.filter(r => r.pass.trim() === '合' && !isNaN(r.credits) && r.credits > 0);
   const totalCredits = passRows.reduce((s, r) => s + r.credits, 0);
 
@@ -1053,6 +1058,64 @@ function showWsGuide() {
 function closeWsGuide() {
   const el = document.getElementById('ws-guide-overlay');
   if (el) el.remove();
+}
+
+function syncRefBtn() {
+  let btn = document.getElementById('ws-ref-btn');
+  if (!wsReferenceRows || !currentDeptId) {
+    if (btn) btn.remove();
+    const panel = document.getElementById('ws-ref-panel');
+    if (panel) panel.remove();
+    return;
+  }
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'ws-ref-btn';
+    btn.className = 'ws-ref-toggle';
+    btn.addEventListener('click', toggleWsRef);
+    document.body.appendChild(btn);
+  }
+  const passCount = wsReferenceRows.filter(r => r.pass.trim() === '合' && !isNaN(r.credits) && r.credits > 0).length;
+  btn.textContent = `📋 成績表 (${passCount}科目)`;
+}
+
+function toggleWsRef() {
+  const panel = document.getElementById('ws-ref-panel');
+  if (panel) { panel.remove(); return; }
+
+  const groups = {};
+  for (const r of wsReferenceRows) {
+    const key = r.bigCat || '区分不明';
+    (groups[key] = groups[key] || []).push(r);
+  }
+
+  let body = '';
+  for (const [bigCat, rows] of Object.entries(groups)) {
+    body += `<div class="ws-ref-group">
+      <div class="ws-ref-group-label">${escHtml(bigCat)}</div>
+      <table class="ws-ref-table"><tbody>`;
+    for (const r of rows) {
+      const ok = r.pass.trim() === '合' && !isNaN(r.credits) && r.credits > 0;
+      body += `<tr class="${ok ? 'ws-row-pass' : 'ws-row-fail'}">
+        <td class="ws-ref-cat">${escHtml(r.cat)}</td>
+        <td class="ws-ref-name">${escHtml(r.name)}</td>
+        <td class="ws-ref-cr">${isNaN(r.credits) ? '–' : r.credits + '単位'}</td>
+        <td class="ws-ref-pass">${ok ? '✓ 合' : (escHtml(r.pass) || '–')}</td>
+      </tr>`;
+    }
+    body += '</tbody></table></div>';
+  }
+
+  const el = document.createElement('div');
+  el.id = 'ws-ref-panel';
+  el.className = 'ws-ref-panel';
+  el.innerHTML = `
+    <div class="ws-ref-header">
+      <span>📋 WebStation 成績表</span>
+      <button class="ws-ref-close" onclick="document.getElementById('ws-ref-panel').remove()">✕</button>
+    </div>
+    <div class="ws-ref-body">${body}</div>`;
+  document.body.appendChild(el);
 }
 
 // ── Boot ──
