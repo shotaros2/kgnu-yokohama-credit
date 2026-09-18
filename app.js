@@ -1027,7 +1027,7 @@ function showWsGuide() {
         <div class="ws-step-content">
           <div class="ws-step-title">WebStationで「単位修得状況照会」を開く</div>
           <div class="ws-step-desc">教務/授業関連 → 成績 → 単位修得状況照会</div>
-          <a href="https://www.kanagawa-u.ac.jp/webstation/" target="_blank" rel="noopener" class="ws-link-btn">WebStation を開く →</a>
+          <a href="https://www.kanagawa-u.ac.jp/webstation/" target="_blank" rel="noopener" class="ws-link-btn">🌐 WebStation を開く ↗</a>
         </div>
       </div>
       <div class="ws-step">
