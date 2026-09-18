@@ -856,7 +856,7 @@ function parseWebStationText(text) {
     }
     if (cols.length < 3) continue;
     const pass = (cols[passCol] || '').trim();
-    if (!pass.includes('合')) continue;
+    if (pass.trim() !== '合') continue;
     const credits = parseFloat(cols[creditsCol]);
     if (isNaN(credits) || credits <= 0) continue;
     const cat    = catCol    >= 0 ? (cols[catCol]    || '').trim() : '';
@@ -898,9 +898,85 @@ function applyWebStationImport(deptId, courses) {
   return matched;
 }
 
+function normalizeWsText(text) {
+  return text
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/　/g, ' ')
+    .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    .split('\n').map(l => l.trimEnd()).join('\n');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderWsPreview(text) {
+  const el = document.getElementById('ws-preview');
+  if (!el) return;
+  if (!text.trim()) { el.innerHTML = ''; return; }
+
+  const lines = text.split('\n').filter(l => l.trim());
+  let passCol = -1, creditsCol = -1, catCol = -1, bigCatCol = -1, nameCol = -1, headerIdx = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const cols = lines[i].split('\t');
+    const clean = cols.map(c => c.replace(/\s/g, ''));
+    const pi = clean.findIndex(c => c === '合否');
+    if (pi !== -1) {
+      passCol    = pi;
+      creditsCol = clean.findIndex(c => c === '単位数');
+      catCol     = clean.findIndex(c => c.includes('中区分'));
+      bigCatCol  = clean.findIndex(c => c.includes('大区分'));
+      nameCol    = clean.findIndex(c => c === '開講科目');
+      if (nameCol === -1) nameCol = clean.findIndex((c,idx) => idx !== bigCatCol && idx !== catCol && c.includes('科目'));
+      headerIdx  = i;
+      break;
+    }
+  }
+
+  if (headerIdx === -1) {
+    el.innerHTML = '<div class="ws-preview-warn">⚠ 見出し行（「合否」の列がある行）が見つかりません。見出し行の先頭からコピーし直してください。</div>';
+    return;
+  }
+
+  const rows = [];
+  for (const line of lines.slice(headerIdx + 1)) {
+    const cols = line.split('\t');
+    if (cols.length < 3) continue;
+    const pass    = (cols[passCol]    || '').trim();
+    const credits = parseFloat(cols[creditsCol >= 0 ? creditsCol : 0]);
+    const cat     = catCol    >= 0 ? (cols[catCol]    || '').trim() : '';
+    const bigCat  = bigCatCol >= 0 ? (cols[bigCatCol] || '').trim() : '';
+    const name    = nameCol   >= 0 ? (cols[nameCol]   || '').trim() : '';
+    rows.push({ pass, credits, cat, bigCat, name });
+  }
+
+  if (rows.length === 0) {
+    el.innerHTML = '<div class="ws-preview-warn">データ行が見つかりません。</div>';
+    return;
+  }
+
+  const passRows = rows.filter(r => r.pass.trim() === '合' && !isNaN(r.credits) && r.credits > 0);
+  const totalCredits = passRows.reduce((s, r) => s + r.credits, 0);
+
+  let html = `<div class="ws-preview-stat">認識: ${rows.length}行　<span class="ws-stat-ok">✓ 合格 ${passRows.length}科目 / ${totalCredits}単位</span></div>`;
+  html += '<div class="ws-preview-wrap"><table class="ws-preview-table"><thead><tr><th>大区分</th><th>中区分</th><th>科目名</th><th>単位</th><th>合否</th></tr></thead><tbody>';
+
+  for (const r of rows) {
+    const ok = r.pass.trim() === '合' && !isNaN(r.credits) && r.credits > 0;
+    html += `<tr class="${ok ? 'ws-row-pass' : 'ws-row-fail'}">
+      <td>${escHtml(r.bigCat)}</td><td>${escHtml(r.cat)}</td><td>${escHtml(r.name)}</td>
+      <td>${isNaN(r.credits) ? '–' : r.credits}</td><td>${ok ? '✓ 合' : escHtml(r.pass) || '–'}</td>
+    </tr>`;
+  }
+
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
 function importFromPaste() {
   const area = document.getElementById('ws-paste-area');
-  const text = area ? area.value : '';
+  const text = area ? normalizeWsText(area.value) : '';
   const courses = parseWebStationText(text);
   if (courses.length === 0) {
     alert('WebStationの「単位修得状況照会」ページで、表の見出し行（「科目大区分」「合否」などの行）から最後の行末まで選択してコピーしてください。');
@@ -959,8 +1035,9 @@ function showWsGuide() {
       <div class="ws-step">
         <div class="ws-step-num">3</div>
         <div class="ws-step-content">
-          <div class="ws-step-title">下の欄に貼り付けて「取込」を押す</div>
-          <textarea id="ws-paste-area" class="ws-paste-area" placeholder="ここにペーストしてください（Ctrl+V）" rows="5"></textarea>
+          <div class="ws-step-title">下の欄に貼り付ける — 自動でプレビュー表示されます</div>
+          <textarea id="ws-paste-area" class="ws-paste-area" placeholder="ここにペーストしてください（Ctrl+V）" rows="3"></textarea>
+          <div id="ws-preview" class="ws-preview"></div>
         </div>
       </div>
     </div>
@@ -969,6 +1046,8 @@ function showWsGuide() {
     </div>
   </div>`;
   document.body.appendChild(overlay);
+  const pasteArea = document.getElementById('ws-paste-area');
+  pasteArea.addEventListener('input', () => renderWsPreview(normalizeWsText(pasteArea.value)));
 }
 
 function closeWsGuide() {

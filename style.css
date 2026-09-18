@@ -351,3 +351,29 @@ main { flex: 1; max-width: 860px; margin: 0 auto; padding: 24px 16px; width: 100
   font-family: inherit; transition: background .15s;
 }
 .ws-import-btn:hover { background: #0284c7; }
+
+/* WS Preview */
+.ws-preview { margin-top: 8px; }
+.ws-preview-warn {
+  font-size: 11px; color: #dc2626; background: #fee2e2;
+  border: 1px solid #fca5a5; border-radius: 6px; padding: 8px 10px; line-height: 1.5;
+}
+.ws-preview-stat {
+  font-size: 11px; color: #475569; margin-bottom: 4px; font-weight: 600;
+}
+.ws-stat-ok { color: #16a34a; }
+.ws-preview-wrap {
+  overflow-x: auto; overflow-y: auto; max-height: 180px;
+  border-radius: 6px; border: 1px solid #e2e8f0;
+}
+.ws-preview-table {
+  border-collapse: collapse; font-size: 10px; white-space: nowrap; width: 100%;
+}
+.ws-preview-table thead th {
+  background: #f1f5f9; color: #475569; padding: 4px 8px;
+  border: 1px solid #e2e8f0; font-weight: 700;
+  position: sticky; top: 0; z-index: 1;
+}
+.ws-preview-table td { padding: 3px 8px; border: 1px solid #e2e8f0; }
+.ws-row-pass td { background: #dcfce7; color: #14532d; }
+.ws-row-fail td { background: #f8fafc; color: #94a3b8; }
