@@ -586,6 +586,7 @@ function renderDetail(deptId, isShared) {
     ${sharedBanner}
     <div class="detail-top-bar">
       <button class="back-btn" onclick="renderSelect()">← 学科を変更</button>
+      <button class="ws-import-top-btn" onclick="showWsGuide()">📥 自動取込</button>
       <button class="share-btn" onclick="copyShareLink('${dept.id}')">リンクを共有</button>
     </div>
     <div class="dept-header" style="--fcolor:${dept.fcolor}">
@@ -830,6 +831,149 @@ function loadShareFromHash() {
   } catch (e) {
     return false;
   }
+}
+
+// ── WebStation Import ──
+function parseWebStationText(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trimEnd());
+  const courses = [];
+  let passCol = -1, creditsCol = -1, catCol = -1, bigCatCol = -1;
+  let headerFound = false;
+
+  for (const line of lines) {
+    const cols = line.split('\t');
+    if (!headerFound) {
+      const clean = cols.map(c => c.replace(/\s/g, ''));
+      const pi = clean.findIndex(c => c === '合否');
+      if (pi !== -1) {
+        passCol    = pi;
+        creditsCol = clean.findIndex(c => c === '単位数');
+        catCol     = clean.findIndex(c => c.includes('中区分'));
+        bigCatCol  = clean.findIndex(c => c.includes('大区分'));
+        headerFound = true;
+      }
+      continue;
+    }
+    if (cols.length < 3) continue;
+    const pass = (cols[passCol] || '').trim();
+    if (!pass.includes('合')) continue;
+    const credits = parseFloat(cols[creditsCol]);
+    if (isNaN(credits) || credits <= 0) continue;
+    const cat    = catCol    >= 0 ? (cols[catCol]    || '').trim() : '';
+    const bigCat = bigCatCol >= 0 ? (cols[bigCatCol] || '').trim() : '';
+    courses.push({ cat, bigCat, credits });
+  }
+  return courses;
+}
+
+const KYOYO_WS_MAP = {
+  fys:  ['初年次ゼミナール'],
+  eigo: ['外国語科目'],
+  hum:  ['人文の分野'],
+  soc:  ['社会の分野'],
+  nat:  ['自然の分野'],
+  jink: ['人間形成の分野'],
+  civ:  ['現代社会と市民'],
+};
+
+function applyWebStationImport(deptId, courses) {
+  const dept = DEPTS.find(d => d.id === deptId);
+  if (!dept) return 0;
+  let matched = 0;
+
+  for (const sec of dept.sections) {
+    if (sec.id !== 'kyoyo') continue;
+    for (const item of sec.items) {
+      const wsCats = KYOYO_WS_MAP[item.id];
+      if (!wsCats) continue;
+      const hits = courses.filter(c =>
+        wsCats.some(wc => c.cat.replace(/\s/g, '').includes(wc.replace(/\s/g, '')))
+      );
+      if (hits.length === 0) continue;
+      const credits = hits.reduce((s, c) => s + c.credits, 0);
+      saveCredit(deptId, sec.id, item.id, credits);
+      matched += hits.length;
+    }
+  }
+  return matched;
+}
+
+function importFromPaste() {
+  const area = document.getElementById('ws-paste-area');
+  const text = area ? area.value : '';
+  const courses = parseWebStationText(text);
+  if (courses.length === 0) {
+    alert('WebStationの「単位修得状況照会」ページで、表の見出し行（「科目大区分」「合否」などの行）から最後の行末まで選択してコピーしてください。');
+    return;
+  }
+  const count = applyWebStationImport(currentDeptId, courses);
+  closeWsGuide();
+  if (count === 0) {
+    alert('共通教養科目の修得済み科目が見つかりませんでした。\n見出し行から最後の行末まで選択してコピーしてください。');
+    return;
+  }
+  renderDetail(currentDeptId, false);
+  showToast(`共通教養${count}科目の単位を取り込みました`);
+}
+
+function showWsGuide() {
+  if (document.getElementById('ws-guide-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'ws-guide-overlay';
+  overlay.className = 'ws-guide-overlay';
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeWsGuide(); });
+  overlay.innerHTML = `<div class="ws-guide-modal">
+    <div class="ws-guide-header">
+      <span class="ws-guide-title">WebStation から自動取込</span>
+      <button class="ws-guide-close" onclick="closeWsGuide()">✕</button>
+    </div>
+    <div class="ws-guide-body">
+      <div class="ws-step">
+        <div class="ws-step-num">1</div>
+        <div class="ws-step-content">
+          <div class="ws-step-title">WebStationで「単位修得状況照会」を開く</div>
+          <div class="ws-step-desc">教務/授業関連 → 成績 → 単位修得状況照会</div>
+        </div>
+      </div>
+      <div class="ws-step">
+        <div class="ws-step-num">2</div>
+        <div class="ws-step-content">
+          <div class="ws-step-title">表の<strong>見出し行</strong>から最後の行末までを選択してコピー</div>
+          <div class="ws-step-desc">Ctrl+A は不可。<strong>見出し行（「科目大区分」「合否」などの行）の先頭から、最後の行の末尾まで</strong>をドラッグで選択してコピー（Ctrl+C）してください。</div>
+          <div class="ws-copy-example">
+            <div class="ws-copy-example-label">▼ コピー開始（見出し行の先頭）</div>
+            <div class="ws-copy-table-wrap">
+              <table class="ws-copy-table">
+                <tr><th>No.</th><th>科目大区分</th><th>科目中区分</th><th>開講科目</th><th>単位数</th><th>…</th><th>合否</th></tr>
+                <tr><td>1</td><td>共通教養科目…</td><td>初年次ゼミ…</td><td>ＦＹＳ</td><td>2.0</td><td>…</td><td>合</td></tr>
+                <tr><td>2</td><td>共通教養科目…</td><td>外国語科目</td><td>英語I（Ｌ）</td><td>1.0</td><td>…</td><td>合</td></tr>
+                <tr class="ws-mid-row"><td colspan="7">︙（中略）</td></tr>
+                <tr><td>N</td><td>専攻科目</td><td>…</td><td>…</td><td>2.0</td><td>…</td><td>合</td></tr>
+              </table>
+            </div>
+            <div class="ws-copy-example-label-end">▲ コピー終了（最後の行末）</div>
+          </div>
+          <div class="ws-hint-ok">※ 専攻科目は自動取込されません。手動で入力してください。</div>
+        </div>
+      </div>
+      <div class="ws-step">
+        <div class="ws-step-num">3</div>
+        <div class="ws-step-content">
+          <div class="ws-step-title">下の欄に貼り付けて「取込」を押す</div>
+          <textarea id="ws-paste-area" class="ws-paste-area" placeholder="ここにペーストしてください（Ctrl+V）" rows="5"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="ws-guide-footer">
+      <button class="ws-import-btn" onclick="importFromPaste()">📥 取込</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function closeWsGuide() {
+  const el = document.getElementById('ws-guide-overlay');
+  if (el) el.remove();
 }
 
 // ── Boot ──
